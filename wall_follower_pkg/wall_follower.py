@@ -1,81 +1,139 @@
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
+from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool
+import numpy as np
 
 class WallFollower(Node):
     def __init__(self):
-        super().__init__('wall_follower')
-        self.subscription = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
-        self.publisher = self.create_publisher(Twist, '/cmd_vel', 10)
-        self.start_subscription = self.create_subscription(Bool, '/start', self.start_callback, 10)
-        self.twist = Twist()
-        self.min_distance = 0.5  # Minimum distance to maintain from the wall
-        self.max_distance = 1.5  # Maximum distance to maintain from the wall
-        self.start_robot = False
+        super().__init__("wall_follower")
+        self.set_parameters()
+        self.create_subscriptions()
+        self.create_publishers()
+        self.log_message("Wall Follower Node Initialized")
+
+    def set_parameters(self):
+        self.max_wall_dist = 0.6  # Desired wall distance threshold
+        self.curr_state = 0
+        self.wall_found = False
+        self.start_received = False
+
+    def create_subscriptions(self):
+        self.scan_subscription = self.create_subscription(
+            LaserScan, "/scan", self.scan_callback, 10
+        )
+        self.start_subscription = self.create_subscription(
+            Bool, "/start", self.start_callback, 10
+        )
+
+    def create_publishers(self):
+        self.cmd_vel_publisher = self.create_publisher(Twist, "/cmd_vel", 10)
 
     def scan_callback(self, msg):
-        if not self.start_robot:
-            self.get_logger().info("Waiting for start command...")
-            return
-
-        # Get the range values from the laser scan
-        ranges = msg.ranges
-
-        # Get the distances from different directions
-        forward_distance = ranges[0]
-        left_forward_distance = ranges[45]
-        right_forward_distance = ranges[315]
-        left_distance = ranges[90]
-        right_distance = ranges[270]
-        left_rear_distance = ranges[135]
-        right_rear_distance = ranges[225]
-
-        self.get_logger().info(f"Distances:")
-        self.get_logger().info(f"  Forward: {forward_distance:.2f}")
-        self.get_logger().info(f"  Left Forward: {left_forward_distance:.2f}")
-        self.get_logger().info(f"  Right Forward: {right_forward_distance:.2f}")
-        self.get_logger().info(f"  Left: {left_distance:.2f}")
-        self.get_logger().info(f"  Right: {right_distance:.2f}")
-        self.get_logger().info(f"  Left Rear: {left_rear_distance:.2f}")
-        self.get_logger().info(f"  Right Rear: {right_rear_distance:.2f}")
-
-        # Set the linear and angular velocities based on the distances
-        if forward_distance > self.min_distance:
-            self.twist.linear.x = 0.2  # Move forward
-            if left_distance < self.min_distance:
-                self.twist.angular.z = -0.5  # Turn right to maintain distance from left wall
-                self.get_logger().info("Too close to the left wall, turning right")
-            elif left_distance > self.max_distance:
-                self.twist.angular.z = 0.5  # Turn left to maintain distance from left wall
-                self.get_logger().info("Too far from the left wall, turning left")
-            else:
-                self.twist.angular.z = 0.0  # Go straight
-                self.get_logger().info("Moving forward, maintaining distance from left wall")
-        else:
-            self.twist.linear.x = 0.0  # Stop
-            if left_rear_distance > right_rear_distance:
-                self.twist.angular.z = 0.5  # Turn left
-                self.get_logger().info("Obstacle detected, turning left")
-            else:
-                self.twist.angular.z = -0.5  # Turn right
-                self.get_logger().info("Obstacle detected, turning right")
-
-        # Publish the velocity commands
-        self.publisher.publish(self.twist)
+        regions = self.process_laser_scan(msg)
+        self.take_action(regions)
 
     def start_callback(self, msg):
-        self.start_robot = msg.data
-        if self.start_robot:
-            self.get_logger().info("Received start command, robot starts moving")
+        if msg.data:
+            self.log_message("Starting wall following")
+            self.start_received = True
+        else:
+            self.log_message("Stopping wall following")
+            self.start_received = False
+
+    def process_laser_scan(self, msg):
+        length = len(msg.ranges)
+        each_div = length // 8
+        front_start = length - each_div // 2
+        front_end = each_div // 2
+
+        regions = {
+            "front": min(min(msg.ranges[front_start:]), min(msg.ranges[:front_end])),
+            "left": min(msg.ranges[each_div : 2 * each_div]),
+            "fleft": min(msg.ranges[each_div // 2 : each_div]),
+            "fright": min(msg.ranges[front_start - each_div // 2 : front_start]),
+            "right": min(msg.ranges[length - 2 * each_div : length - each_div]),
+        }
+        return regions
+
+    def take_action(self, regions):
+        if not self.wall_found:
+            if (
+                regions["front"] > self.max_wall_dist
+                and regions["right"] > self.max_wall_dist
+                and regions["left"] > self.max_wall_dist
+            ):
+                self.curr_state = 0  # Find wall
+            elif regions["front"] < self.max_wall_dist:
+                self.curr_state = 1  # Wall found, turn left
+                self.wall_found = True
+        else:
+            if (
+                regions["right"] > self.max_wall_dist
+                and regions["front"] > self.max_wall_dist
+            ):
+                self.curr_state = 3  # Move diagonally right
+            elif (
+                regions["right"] > self.max_wall_dist
+                and regions["fright"] > self.max_wall_dist
+                and regions["front"] > self.max_wall_dist
+            ):
+                self.curr_state = 3  # Turn right
+            elif regions["front"] > self.max_wall_dist:
+                self.curr_state = 2  # Go straight
+            elif regions["front"] < self.max_wall_dist:
+                self.curr_state = 1  # Turn left
+            elif (
+                regions["front"] < self.max_wall_dist
+                and regions["fleft"] < self.max_wall_dist
+                and regions["fright"] < self.max_wall_dist
+            ):
+                self.curr_state = 1  # Dead end, turn left
+
+    def run(self):
+        self.log_message("Wall Follower Started")
+        while rclpy.ok():
+            if self.start_received:
+                vel_cmd = self.get_velocity_command()
+                self.cmd_vel_publisher.publish(vel_cmd)
+            else:
+                self.log_message("Waiting for start message...")
+
+            rclpy.spin_once(self, timeout_sec=0.1)
+
+    def get_velocity_command(self):
+        vel_cmd = Twist()
+        if self.curr_state == 0:  # Find wall
+            vel_cmd.linear.x = 0.15
+            vel_cmd.angular.z = 0.0
+        elif self.curr_state == 1:  # Turn left
+            vel_cmd.linear.x = 0.02
+            vel_cmd.angular.z = 0.25
+        elif self.curr_state == 2:  # Go straight
+            vel_cmd.linear.x = 0.12
+            vel_cmd.angular.z = -0.02
+        elif self.curr_state == 3:  # Turn right or move diagonally right
+            vel_cmd.linear.x = 0.05
+            vel_cmd.angular.z = -0.45
+        else:
+            self.log_message("Unknown state", "warn")
+        return vel_cmd
+
+    def log_message(self, message, level="info"):
+        if level == "info":
+            self.get_logger().info(message)
+        elif level == "warn":
+            self.get_logger().warn(message)
+        elif level == "error":
+            self.get_logger().error(message)
 
 def main(args=None):
     rclpy.init(args=args)
     wall_follower = WallFollower()
-    rclpy.spin(wall_follower)
+    wall_follower.run()
     wall_follower.destroy_node()
     rclpy.shutdown()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
