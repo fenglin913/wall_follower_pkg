@@ -14,7 +14,7 @@ class WallFollower(Node):
         self.log_message("Wall Follower Node Initialized")
 
     def set_parameters(self):
-        self.max_wall_dist = 0.55  # Desired wall distance threshold
+        self.max_wall_dist = 0.65  # Desired wall distance threshold
         self.curr_state = 0
         self.wall_found = False
         self.start_received = False
@@ -114,13 +114,13 @@ class WallFollower(Node):
             vel_cmd.linear.x = 0.15
             vel_cmd.angular.z = 0.0
         elif self.curr_state == 1:  # Turn left
-            vel_cmd.linear.x = 0.05
-            vel_cmd.angular.z = 0.45
+            vel_cmd.linear.x = 0.0
+            vel_cmd.angular.z = 0.25
         elif self.curr_state == 2:  # Go straight
             vel_cmd.linear.x = 0.12
-            vel_cmd.angular.z = -0.02
+            vel_cmd.angular.z = 0
         elif self.curr_state == 3:  # Turn right or move diagonally right
-            vel_cmd.linear.x = 0.05
+            vel_cmd.linear.x = 0.12
             vel_cmd.angular.z = -0.45
         else:
             self.log_message("Unknown state", "warn")
