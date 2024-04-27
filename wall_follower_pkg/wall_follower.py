@@ -117,8 +117,8 @@ class WallFollower(Node):
             vel_cmd.linear.x = 0.0
             vel_cmd.angular.z = 0.25
         elif self.curr_state == 2:  # Go straight
-            vel_cmd.linear.x = 0.12
-            vel_cmd.angular.z = 0
+            vel_cmd.linear.x = 0.07
+            vel_cmd.angular.z = 0.0
         elif self.curr_state == 3:  # Turn right or move diagonally right
             vel_cmd.linear.x = 0.12
             vel_cmd.angular.z = -0.45
