@@ -120,8 +120,8 @@ class WallFollower(Node):
             vel_cmd.linear.x = 0.07
             vel_cmd.angular.z = 0.0
         elif self.curr_state == 3:  # Turn right or move diagonally right
-            vel_cmd.linear.x = 0.12
-            vel_cmd.angular.z = -0.45
+            vel_cmd.linear.x = 0.08
+            vel_cmd.angular.z = -0.25
         else:
             self.log_message("Unknown state", "warn")
         return vel_cmd
