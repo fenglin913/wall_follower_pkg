@@ -67,6 +67,7 @@ class WallFollower(Node):
                 self.curr_state = 0  # Find wall
             elif regions["front"] < self.max_wall_dist:
                 self.curr_state = 1  # Wall found, turn left
+                self.log_message("wall found, turn left")
                 self.wall_found = True
         else:
             if (
@@ -74,22 +75,27 @@ class WallFollower(Node):
                 and regions["front"] > self.max_wall_dist
             ):
                 self.curr_state = 3  # Move diagonally right
+                self.log_message("Move diagonally right")
             elif (
                 regions["right"] > self.max_wall_dist
                 and regions["fright"] > self.max_wall_dist
                 and regions["front"] > self.max_wall_dist
             ):
                 self.curr_state = 3  # Turn right
+                self.log_message("Turn right")
             elif regions["front"] > self.max_wall_dist:
                 self.curr_state = 2  # Go straight
+                self.log_message("Go straight")
             elif regions["front"] < self.max_wall_dist:
                 self.curr_state = 1  # Turn left
+                self.log_message("Turn left")
             elif (
                 regions["front"] < self.max_wall_dist
                 and regions["fleft"] < self.max_wall_dist
                 and regions["fright"] < self.max_wall_dist
             ):
                 self.curr_state = 1  # Dead end, turn left
+                self.log_message("Deade end, turn left")
 
     def run(self):
         self.log_message("Wall Follower Started")
