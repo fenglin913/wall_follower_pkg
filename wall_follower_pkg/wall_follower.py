@@ -14,7 +14,7 @@ class WallFollower(Node):
         self.log_message("Wall Follower Node Initialized")
 
     def set_parameters(self):
-        self.max_wall_dist = 0.7  # Desired wall distance threshold
+        self.max_wall_dist = 0.55  # Desired wall distance threshold
         self.curr_state = 0
         self.wall_found = False
         self.start_received = False
